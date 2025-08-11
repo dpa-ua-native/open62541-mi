@@ -698,7 +698,7 @@ if(NOT UA_FORCE_CPP AND (CMAKE_COMPILER_IS_GNUCC OR "x${CMAKE_C_COMPILER_ID}" ST
     # Check prototype definitions
     check_add_cc_flag("-Wmissing-prototypes")
     check_add_cc_flag("-Wstrict-prototypes")
-    check_add_cc_flag("-Wredundant-decls")
+    # does not work for mbedtls ... check_add_cc_flag("-Wredundant-decls")
 
     check_add_cc_flag("-Wuninitialized")
     check_add_cc_flag("-Winit-self")
