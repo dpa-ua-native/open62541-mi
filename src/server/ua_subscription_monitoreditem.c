@@ -615,7 +615,7 @@ UA_MonitoredItem_setMonitoringMode(UA_Server *server, UA_MonitoredItem *mon,
      * sampling callback failed, set to disabled. But don't delete the current
      * notifications. */
     UA_StatusCode res = UA_MonitoredItem_registerSampling(server, mon);
-    if(res != UA_STATUSCODE_GOOD) {
+    if(res != UA_STATUSCODE_GOOD)
         mon->monitoringMode = UA_MONITORINGMODE_DISABLED;
 
     /* Change the MonitoredItem in userland */
