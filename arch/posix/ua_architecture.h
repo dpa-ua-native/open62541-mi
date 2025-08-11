@@ -52,7 +52,7 @@ void UA_sleep_ms(unsigned long ms);
     (defined(__GNU_LIBRARY__) && (__GNU_LIBRARY__ <= 6) && \
      (__GLIBC__ <= 2) && (__GLIBC_MINOR__ < 16) || \
     !defined(__GNU_LIBRARY__))
-# define UA_fd_set(fd, fds) FD_SET((unsigned int)fd, fds)
+# define UA_fd_set(fd, fds) FD_SET(fd, fds)
 # define UA_fd_isset(fd, fds) FD_ISSET((unsigned int)fd, fds)
 #else
 # define UA_fd_set(fd, fds) FD_SET(fd, fds)
