@@ -419,6 +419,98 @@ removeMonitoredItemBackPointer(UA_Server *server, UA_Session *session,
     return UA_STATUSCODE_GOOD;
 }
 
+static void
+UA_Server_monitoredItem_notify_onRegister(UA_Server *server, UA_MonitoredItem *mon) {
+    if(!server->config.monitoredItemRegisterCallback)
+        return;
+    void *targetContext = NULL;
+    getNodeContext(server, mon->itemToMonitor.nodeId, &targetContext);
+
+    /* Compute the index range */
+    UA_NumericRange range;
+    UA_NumericRange *rangeptr = NULL;
+    UA_String *indexRange = &mon->itemToMonitor.indexRange;
+    if(indexRange && indexRange->length > 0) {
+        UA_StatusCode parseResult = UA_NumericRange_parse(&range, *indexRange);
+        if (UA_StatusCode_isBad(parseResult))
+            return;
+        rangeptr = &range;
+    }
+
+    UA_UInt32 subscriptionId = mon->subscription ? mon->subscription->subscriptionId : 0;
+
+    server->config.monitoredItemRegisterCallback(
+        server, subscriptionId,
+        mon->monitoredItemId, mon->monitoringMode, mon->parameters.samplingInterval,
+        &mon->itemToMonitor.nodeId, targetContext, rangeptr,
+        mon->itemToMonitor.attributeId);
+
+    /* Clean up */
+    if(rangeptr)
+        UA_free(range.dimensions);
+}
+
+static void
+UA_Server_monitoredItem_notify_onUnregister(UA_Server *server, UA_MonitoredItem *mon) {
+    if(!server->config.monitoredItemUnregisterCallback)
+        return;
+    void *targetContext = NULL;
+    getNodeContext(server, mon->itemToMonitor.nodeId, &targetContext);
+
+    /* Compute the index range */
+    UA_NumericRange range;
+    UA_NumericRange *rangeptr = NULL;
+    UA_String *indexRange = &mon->itemToMonitor.indexRange;
+    if(indexRange && indexRange->length > 0) {
+        UA_StatusCode parseResult = UA_NumericRange_parse(&range, *indexRange);
+        if (UA_StatusCode_isBad(parseResult))
+            return;
+        rangeptr = &range;
+    }
+
+    UA_UInt32 subscriptionId = mon->subscription ? mon->subscription->subscriptionId : 0;
+
+    server->config.monitoredItemUnregisterCallback(
+        server, subscriptionId, mon->monitoredItemId,
+        &mon->itemToMonitor.nodeId, targetContext, rangeptr,
+        mon->itemToMonitor.attributeId);
+
+    /* Clean up */
+    if(rangeptr)
+        UA_free(range.dimensions);
+}
+
+static void
+UA_Server_monitoredItem_notify_onChange(UA_Server *server, UA_MonitoredItem *mon) {
+    if(!server->config.monitoredItemChangeCallback)
+        return;
+    void *targetContext = NULL;
+    getNodeContext(server, mon->itemToMonitor.nodeId, &targetContext);
+
+    /* Compute the index range */
+    UA_NumericRange range;
+    UA_NumericRange *rangeptr = NULL;
+    UA_String *indexRange = &mon->itemToMonitor.indexRange;
+    if(indexRange && indexRange->length > 0) {
+        UA_StatusCode parseResult = UA_NumericRange_parse(&range, *indexRange);
+        if (UA_StatusCode_isBad(parseResult))
+            return;
+        rangeptr = &range;
+    }
+
+    UA_UInt32 subscriptionId = mon->subscription ? mon->subscription->subscriptionId : 0;
+
+    server->config.monitoredItemChangeCallback(
+        server, subscriptionId,
+        mon->monitoredItemId, mon->monitoringMode, mon->parameters.samplingInterval,
+        &mon->itemToMonitor.nodeId, targetContext, rangeptr,
+        mon->itemToMonitor.attributeId);
+
+    /* Clean up */
+    if(rangeptr)
+        UA_free(range.dimensions);
+}
+
 void
 UA_Server_registerMonitoredItem(UA_Server *server, UA_MonitoredItem *mon) {
     UA_LOCK_ASSERT(&server->serviceMutex, 1);
@@ -439,20 +531,7 @@ UA_Server_registerMonitoredItem(UA_Server *server, UA_MonitoredItem *mon) {
     server->monitoredItemsSize++;
 
     /* Register the MonitoredItem in userland */
-    if(server->config.monitoredItemRegisterCallback) {
-        UA_Session *session = &server->adminSession;
-        if(sub)
-            session = sub->session;
-
-        void *targetContext = NULL;
-        getNodeContext(server, mon->itemToMonitor.nodeId, &targetContext);
-        server->config.monitoredItemRegisterCallback(server,
-                                                     session ? &session->sessionId : NULL,
-                                                     session ? session->sessionHandle : NULL,
-                                                     &mon->itemToMonitor.nodeId,
-                                                     targetContext,
-                                                     mon->itemToMonitor.attributeId, false);
-    }
+    UA_Server_monitoredItem_notify_onRegister(server, mon);
 
     mon->registered = true;
 }
@@ -470,20 +549,7 @@ UA_Server_unregisterMonitoredItem(UA_Server *server, UA_MonitoredItem *mon) {
                              mon->monitoredItemId);
 
     /* Deregister MonitoredItem in userland */
-    if(server->config.monitoredItemRegisterCallback) {
-        UA_Session *session = &server->adminSession;
-        if(sub)
-            session = sub->session;
-
-        void *targetContext = NULL;
-        getNodeContext(server, mon->itemToMonitor.nodeId, &targetContext);
-        server->config.monitoredItemRegisterCallback(server,
-                                                     session ? &session->sessionId : NULL,
-                                                     session ? session->sessionHandle : NULL,
-                                                     &mon->itemToMonitor.nodeId,
-                                                     targetContext,
-                                                     mon->itemToMonitor.attributeId, true);
-    }
+    UA_Server_monitoredItem_notify_onUnregister(server, mon);
 
     /* Deregister in Subscription and server */
     if(sub)
@@ -516,6 +582,10 @@ UA_MonitoredItem_setMonitoringMode(UA_Server *server, UA_MonitoredItem *mon,
             UA_Notification_delete(notification);
         }
         UA_DataValue_clear(&mon->lastValue);
+
+        /* Change the MonitoredItem in userland */
+        UA_Server_monitoredItem_notify_onChange(server, mon);
+
         return UA_STATUSCODE_GOOD;
     }
 
@@ -541,10 +611,11 @@ UA_MonitoredItem_setMonitoringMode(UA_Server *server, UA_MonitoredItem *mon,
      * sampling callback failed, set to disabled. But don't delete the current
      * notifications. */
     UA_StatusCode res = UA_MonitoredItem_registerSampling(server, mon);
-    if(res != UA_STATUSCODE_GOOD) {
+    if(res != UA_STATUSCODE_GOOD)
         mon->monitoringMode = UA_MONITORINGMODE_DISABLED;
-        return res;
-    }
+
+    /* Change the MonitoredItem in userland */
+    UA_Server_monitoredItem_notify_onChange(server, mon);
 
     /* Manually create the first sample if the MonitoredItem was disabled, the
      * MonitoredItem is now sampling (or reporting) and it is not an
@@ -554,7 +625,7 @@ UA_MonitoredItem_setMonitoringMode(UA_Server *server, UA_MonitoredItem *mon,
        mon->itemToMonitor.attributeId != UA_ATTRIBUTEID_EVENTNOTIFIER)
         monitoredItem_sampleCallback(server, mon);
 
-    return UA_STATUSCODE_GOOD;
+    return res;
 }
 
 static void
