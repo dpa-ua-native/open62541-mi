@@ -317,26 +317,24 @@ struct UA_ServerConfig {
     /* Limits for PublishRequests */
     UA_UInt32 maxPublishReqPerSession;
 
-    /* Register MonitoredItem in Userland
-     *
-     * @param server Allows the access to the server object
-     * @param sessionId The session id, represented as an node id
-     * @param sessionContext An optional pointer to user-defined data for the
-     *        specific data source
-     * @param nodeid Id of the node in question
-     * @param nodeidContext An optional pointer to user-defined data, associated
-     *        with the node in the nodestore. Note that, if the node has already
-     *        been removed, this value contains a NULL pointer.
-     * @param attributeId Identifies which attribute (value, data type etc.) is
-     *        monitored
-     * @param removed Determines if the MonitoredItem was removed or created. */
-    void (*monitoredItemRegisterCallback)(UA_Server *server,
-                                          const UA_NodeId *sessionId,
-                                          void *sessionContext,
-                                          const UA_NodeId *nodeId,
-                                          void *nodeContext,
-                                          UA_UInt32 attibuteId,
-                                          UA_Boolean removed);
+    /* Register/Unregister/Change MonitoredItem in Userland */
+
+    void (*monitoredItemRegisterCallback)(UA_Server *server, UA_UInt32 subscriptionId,
+                                          UA_UInt32 monitoredItemId,
+                                          UA_MonitoringMode monitoringMode,
+                                          UA_Double samplingInterval,
+                                          const UA_NodeId *nodeId, void *nodeContext,
+                                          UA_NumericRange *range, UA_UInt32 attibuteId);
+    void (*monitoredItemUnregisterCallback)(UA_Server *server, UA_UInt32 subscriptionId,
+                                            UA_UInt32 monitoredItemId,
+                                            const UA_NodeId *nodeId, void *nodeContext,
+                                            UA_NumericRange *range, UA_UInt32 attibuteId);
+    void (*monitoredItemChangeCallback)(UA_Server *server, UA_UInt32 subscriptionId,
+                                        UA_UInt32 monitoredItemId,
+                                        UA_MonitoringMode monitoringMode,
+                                        UA_Double samplingInterval,
+                                        const UA_NodeId *nodeId, void *nodeContext,
+                                        UA_NumericRange *range, UA_UInt32 attibuteId);
 #endif
 
     /**
